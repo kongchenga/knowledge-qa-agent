@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识问答 Agent v2</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:system-ui,-apple-system,sans-serif; background:#f0f2f5; color:#1a1a2e; height:100vh; display:flex; }
+.sidebar { width:260px; background:#1a1a2e; color:#ccc; display:flex; flex-direction:column; flex-shrink:0; }
+.sidebar h2 { padding:16px; color:#fff; font-size:15px; border-bottom:1px solid #333; }
+.sidebar .conv-list { flex:1; overflow-y:auto; }
+.conv-item { padding:11px 16px; cursor:pointer; border-bottom:1px solid #2a2a4e; font-size:13px; display:flex; justify-content:space-between; }
+.conv-item:hover { background:#2a2a4e; }
+.conv-item.active { background:#0f3460; color:#fff; }
+.conv-item .del { color:#888; margin-left:8px; cursor:pointer; }
+.conv-item .del:hover { color:#e63946; }
+.sidebar .actions { padding:12px; border-top:1px solid #333; }
+.sidebar .btn-side { width:100%; padding:8px; background:#0f3460; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; }
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.header { padding:14px 24px; background:#fff; border-bottom:1px solid #e0e0e0; display:flex; align-items:center; gap:16px; }
+.header h1 { font-size:18px; color:#16213e; }
+.header .version { font-size:11px; color:#888; margin-left:4px; }
+.tabs { display:flex; gap:4px; margin-left:auto; }
+.tab-btn { padding:8px 16px; border:none; background:#f0f2f5; cursor:pointer; font-size:13px; border-radius:6px; }
+.tab-btn.active { background:#0f3460; color:#fff; }
+.chat-area { flex:1; overflow-y:auto; padding:20px 24px; display:flex; flex-direction:column; gap:12px; }
+.chat-area .empty { text-align:center; padding:60px; color:#aaa; }
+.msg { max-width:82%; padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.6; }
+.msg.user { align-self:flex-end; background:#0f3460; color:#fff; }
+.msg.assistant { align-self:flex-start; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+.msg.assistant .sources-bar { margin-top:10px; padding-top:8px; border-top:1px solid #eee; font-size:12px; color:#888; }
+.msg.assistant .source-tag { display:inline-block; background:#e0e7ff; color:#0f3460; padding:1px 6px; border-radius:4px; margin:2px; font-size:11px; }
+.msg.assistant .source-tag .score { color:#666; font-size:10px; }
+.msg.thinking { align-self:flex-start; background:#fff7e0; border:1px solid #f0c040; font-size:13px; }
+.msg.thinking .dots::after { content:''; animation: dots 1.5s infinite; }
+@keyframes dots { 0% { content:''; } 33% { content:'.'; } 66% { content:'..'; } 100% { content:'...'; } }
+.input-bar { padding:14px 24px; background:#fff; border-top:1px solid #e0e0e0; display:flex; gap:8px; align-items:flex-end; }
+.input-bar textarea { flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; resize:none; min-height:44px; max-height:120px; font-family:inherit; }
+.input-bar button { padding:10px 24px; background:#0f3460; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; white-space:nowrap; }
+.input-bar button:disabled { opacity:0.5; cursor:not-allowed; }
+.card-panel { flex:1; overflow-y:auto; padding:20px 24px; display:none; }
+.card-panel.active { display:block; }
+.card { background:#fff; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.card h3 { font-size:15px; margin-bottom:10px; color:#0f3460; }
+.input-group { margin-bottom:10px; }
+.input-group label { display:block; font-size:12px; margin-bottom:3px; color:#555; font-weight:500; }
+.input-group input, .input-group textarea, .input-group select { width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:13px; }
+.input-group textarea { resize:vertical; min-height:60px; }
+.btn { padding:8px 16px; border:none; border-radius:6px; cursor:pointer; font-size:13px; }
+.btn-primary { background:#0f3460; color:#fff; }
+.btn-danger { background:#e63946; color:#fff; }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.tag { display:inline-block; background:#e0e7ff; color:#0f3460; padding:2px 8px; border-radius:4px; font-size:11px; margin:2px; }
+.cat { display:inline-block; background:#d4f0d4; color:#1a4a1a; padding:2px 8px; border-radius:4px; font-size:11px; margin:2px; }
+.doc-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee; }
+.doc-row:last-child { border:none; }
+.doc-row .info { flex:1; }
+.doc-row .title { font-weight:500; font-size:13px; }
+.doc-row .meta { font-size:11px; color:#888; margin-top:3px; }
+.stats-row { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.stat-mini { background:#fff; padding:10px 16px; border-radius:8px; font-size:12px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.stat-mini b { color:#0f3460; font-size:15px; }
+.edit-panel { display:none; background:#fff; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,.1); }
+.edit-panel h3 { margin-bottom:10px; }
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 20px; border-radius:8px; font-size:13px; z-index:999; opacity:0; transition:opacity 0.3s; }
+.toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>对话历史</h2>
+    <div class="conv-list" id="convList"></div>
+    <div class="actions">
+        <button class="btn-side" onclick="newChat()">+ 新对话</button>
+    </div>
+    <div class="cache-info" id="cacheStats" style="padding:8px 16px;font-size:11px;color:#666;border-top:1px solid #333;"></div>
+</div>
+
+<div class="main">
+    <div class="header">
+        <h1>知识问答 <span class="version">v2</span></h1>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showPanel('chat')">对话</button>
+            <button class="tab-btn" onclick="showPanel('docs')">文档管理</button>
+            <button class="tab-btn" onclick="showPanel('upload')">上传</button>
+        </div>
+    </div>
+
+    <div class="chat-area active" id="panel-chat">
+        <div class="empty" id="chatEmpty">
+            <div style="font-size:32px;margin-bottom:12px;">💬</div>
+            <div>开始提问或左侧新建对话</div>
+            <div style="font-size:12px;color:#ccc;margin-top:8px;">支持流式输出·语义检索·重排序</div>
+        </div>
+    </div>
+
+    <div class="card-panel" id="panel-docs">
+        <div class="stats-row" id="docStats"></div>
+        <div class="input-group" style="display:flex;gap:8px;">
+            <input type="text" id="filterCat" placeholder="按分类筛选..." oninput="loadDocs()" style="flex:1;">
+            <button class="btn btn-primary" onclick="showEditPanel()">+ 新建</button>
+        </div>
+        <div class="edit-panel" id="editPanel">
+            <h3 id="editTitleLabel">新建文档</h3>
+            <div class="input-group"><label>标题</label><input type="text" id="editTitle"></div>
+            <div class="input-group"><label>分类</label><input type="text" id="editCategory" placeholder="如: 技术文档、产品手册"></div>
+            <div class="input-group"><label>标签 (逗号分隔)</label><input type="text" id="editTags"></div>
+            <div class="input-group"><label>内容</label><textarea id="editContent" rows="8"></textarea></div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-primary" id="editSaveBtn" onclick="saveDoc()">保存</button>
+                <button class="btn" onclick="hideEditPanel()">取消</button>
+            </div>
+        </div>
+        <div id="docList"></div>
+    </div>
+
+    <div class="card-panel" id="panel-upload">
+        <div class="card">
+            <h3>上传文档</h3>
+            <p style="font-size:12px;color:#888;margin-bottom:12px;">支持 PDF, DOCX, XLSX, TXT, MD, 代码文件等</p>
+            <div class="input-group"><label>标题</label><input type="text" id="upTitle"></div>
+            <div class="input-group"><label>分类</label><input type="text" id="upCategory" placeholder="如: 技术文档"></div>
+            <div class="input-group"><label>标签</label><input type="text" id="upTags"></div>
+            <div class="input-group"><label>文件</label><input type="file" id="upFile" accept=".md,.txt,.pdf,.docx,.xlsx,.py,.json,.csv,.xml,.html,.css,.js"></div>
+            <button class="btn btn-primary" onclick="uploadFile()">上传文件</button>
+        </div>
+        <div class="card">
+            <h3>直接输入文本</h3>
+            <div class="input-group"><label>标题</label><input type="text" id="txtTitle"></div>
+            <div class="input-group"><label>分类</label><input type="text" id="txtCategory"></div>
+            <div class="input-group"><label>标签</label><input type="text" id="txtTags"></div>
+            <div class="input-group"><label>内容</label><textarea id="txtContent" rows="5"></textarea></div>
+            <button class="btn btn-primary" onclick="uploadText()">添加文本</button>
+        </div>
+    </div>
+
+    <div class="input-bar">
+        <textarea id="questionInput" placeholder="输入问题...(Ctrl+Enter 发送)" rows="1"></textarea>
+        <button id="sendBtn" onclick="sendMessage()">发送</button>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let activeConv = null, activeTab = "chat", editingDocId = null;
+let currentStreamController = null;
+let isStreaming = false;
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await loadConvs();
+    await loadStats();
+    document.getElementById("questionInput").addEventListener("keydown", e => {
+        if (e.key === "Enter" && e.ctrlKey) sendMessage();
+    });
+    document.getElementById("questionInput").addEventListener("input", function() {
+        this.style.height = "auto";
+        this.style.height = Math.min(this.scrollHeight, 120) + "px";
+    });
+});
+
+function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+function showPanel(name) {
+    activeTab = name;
+    document.querySelectorAll(".tab-btn").forEach((b,i) => b.classList.toggle("active", i === ["chat","docs","upload"].indexOf(name)));
+    document.getElementById("panel-chat").style.display = name==="chat"?"flex":"none";
+    document.getElementById("panel-docs").style.display = name==="docs"?"block":"none";
+    document.getElementById("panel-upload").style.display = name==="upload"?"block":"none";
+    document.querySelector(".input-bar").style.display = name==="chat"?"flex":"none";
+    if (name === "docs") { loadDocs(); loadStats(); }
+}
+
+async function loadConvs() {
+    try {
+        const r = await fetch("/api/conversations");
+        const data = await r.json();
+        let html = "";
+        (data||[]).forEach(c => {
+            html += `<div class="conv-item${c.id===activeConv?' active':''}" onclick="switchConv(${c.id})">
+                <span>${esc(c.title||'新对话')}</span>
+                <span class="del" onclick="event.stopPropagation();deleteConv(${c.id})">×</span>
+            </div>`;
+        });
+        document.getElementById("convList").innerHTML = html || "<div style='padding:16px;font-size:12px;color:#666;'>暂无对话</div>";
+    } catch(e) { console.error(e); }
+}
+
+async function switchConv(id) {
+    if (isStreaming) return toast("请等待当前回答完成");
+    activeConv = id;
+    await loadConvs();
+    await loadMessages(id);
+    document.getElementById("chatEmpty").style.display = "none";
+}
+
+async function newChat() {
+    if (isStreaming) return toast("请等待当前回答完成");
+    const r = await fetch("/api/conversations", {
+        method:"POST",
+        body: new URLSearchParams({title:"新对话"}),
+    });
+    const data = await r.json();
+    activeConv = data.id;
+    await loadConvs();
+    await loadMessages(data.id);
+    document.getElementById("chatEmpty").style.display = "none";
+}
+
+async function deleteConv(id) {
+    if (!confirm("删除此对话？")) return;
+    await fetch(`/api/conversations/${id}`, {method:"DELETE"});
+    if (activeConv === id) {
+        activeConv = null;
+        document.getElementById("panel-chat").innerHTML = '<div class="empty" id="chatEmpty">开始提问或左侧新建对话</div>';
+    }
+    await loadConvs();
+}
+
+async function loadMessages(convId) {
+    try {
+        const r = await fetch(`/api/conversations/${convId}/messages`);
+        const data = await r.json();
+        const area = document.getElementById("panel-chat");
+        if (!data||!data.length) {
+            area.innerHTML = '<div class="empty" id="chatEmpty">开始提问吧</div>';
+            return;
+        }
+        let html = "";
+        data.forEach(m => {
+            if (m.role === "assistant") {
+                html += renderAssistantMsg(m.content, m.sources||[]);
+            } else {
+                html += `<div class="msg user">${esc(m.content).replace(/\n/g,'<br>')}</div>`;
+            }
+        });
+        area.innerHTML = html;
+        area.scrollTop = area.scrollHeight;
+    } catch(e) { console.error(e); }
+}
+
+function renderAssistantMsg(content, sources) {
+    const srcHtml = (sources||[]).length
+        ? `<div class="sources-bar">📎 来源: ${sources.map(s => `<span class="source-tag">${esc(s.title)} <span class="score">${s.score||''}</span></span>`).join(' ')}</div>`
+        : '';
+    return `<div class="msg assistant">${markdownToHtml(content)}${srcHtml}</div>`;
+}
+
+function markdownToHtml(text) {
+    return esc(text)
+        .replace(/\[来源:\s*([^\]]+)\]/g, '<strong>[来源: $1]</strong>')
+        .replace(/\n/g, '<br>');
+}
+
+async function sendMessage() {
+    if (isStreaming) return toast("正在流式输出中，请等待完成");
+    const input = document.getElementById("questionInput");
+    const btn = document.getElementById("sendBtn");
+    const q = input.value.trim();
+    if (!q) return;
+    if (!activeConv) await newChat();
+
+    const area = document.getElementById("panel-chat");
+    document.getElementById("chatEmpty")?.remove();
+
+    area.insertAdjacentHTML("beforeend", `<div class="msg user">${esc(q)}</div>`);
+    const loadingEl = document.createElement("div");
+    loadingEl.className = "msg thinking";
+    loadingEl.innerHTML = '<span class="dots">思考中</span>';
+    area.appendChild(loadingEl);
+    input.value = "";
+    input.style.height = "44px";
+    area.scrollTop = area.scrollHeight;
+
+    btn.disabled = true;
+    isStreaming = true;
+
+    try {
+        const response = await fetch("/api/query/stream", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({question: q, top_k: 10, session_id: activeConv}),
+        });
+
+        loadingEl.remove();
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "msg assistant";
+        area.appendChild(msgDiv);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "";
+        let sourcesData = [];
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value);
+            const lines = text.split("\n");
+            for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.type === "chunk") {
+                        fullContent += data.content;
+                        msgDiv.innerHTML = markdownToHtml(fullContent);
+                        area.scrollTop = area.scrollHeight;
+                    } else if (data.type === "sources") {
+                        sourcesData = data.sources || [];
+                    } else if (data.type === "done") {
+                        if (sourcesData.length) {
+                            const srcHtml = sourcesData.map(s =>
+                                `<span class="source-tag">${esc(s.title)} <span class="score">${s.score||''}</span></span>`
+                            ).join(' ');
+                            msgDiv.insertAdjacentHTML("beforeend",
+                                `<div class="sources-bar">📎 来源: ${srcHtml}</div>`);
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+        await loadConvs();
+    } catch(e) {
+        loadingEl?.remove();
+        area.insertAdjacentHTML("beforeend",
+            `<div class="msg assistant" style="color:#e63946;">请求失败: ${esc(e.message||'网络错误')}</div>`);
+    }
+    btn.disabled = false;
+    isStreaming = false;
+    area.scrollTop = area.scrollHeight;
+}
+
+async function loadDocs() {
+    try {
+        const cat = document.getElementById("filterCat").value;
+        const r = await fetch(`/api/documents?category=${encodeURIComponent(cat)}`);
+        const data = await r.json();
+        let html = "";
+        (data||[]).forEach(d => {
+            html += `<div class="doc-row">
+                <div class="info">
+                    <div class="title">${esc(d.title)} ${d.category ? '<span class="cat">'+esc(d.category)+'</span>' : ''} ${(d.tags||[]).map(t=>'<span class="tag">'+esc(t)+'</span>').join('')}</div>
+                    <div class="meta">ID: ${d.id} | 分块: ${d.chunk_count} | ${d.created_at}</div>
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn btn-sm" onclick="editDoc(${d.id})">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteDoc(${d.id})">删除</button>
+                </div>
+            </div>`;
+        });
+        document.getElementById("docList").innerHTML = html || "<div style='text-align:center;padding:40px;color:#aaa;'>暂无文档</div>";
+    } catch(e) { console.error(e); }
+}
+
+async function loadStats() {
+    try {
+        const r = await fetch("/api/stats");
+        const data = await r.json();
+        document.getElementById("docStats").innerHTML = `
+            <div class="stat-mini"><b>${data.total_documents}</b> 文档</div>
+            <div class="stat-mini"><b>${data.vector_chunks}</b> 向量分块</div>
+            <div class="stat-mini">语义检索: <b>${data.lsi_enabled?"✓":"✗"}</b></div>
+            <div class="stat-mini">LLM重排: <b>${data.llm_rerank_enabled?"✓":"✗"}</b></div>`;
+        if (data.cache_max && data.cache_max > 0) {
+            const el = document.getElementById("cacheStats");
+            if (el) el.innerHTML = '缓存: <b>' + (data.cache_size||0) + '/' + data.cache_max + '</b> · 命中 <b>' + (data.cache_hits||0) + '</b>';
+        }
+    } catch(e) {}
+}
+
+async function deleteDoc(id) {
+    if (!confirm("确认删除？")) return;
+    await fetch(`/api/documents/${id}`, {method:"DELETE"});
+    loadDocs(); loadStats();
+    toast("文档已删除");
+}
+
+async function editDoc(id) {
+    editingDocId = id;
+    document.getElementById("editTitleLabel").textContent = "编辑文档";
+    document.getElementById("editSaveBtn").textContent = "更新文档";
+    document.getElementById("editPanel").style.display = "block";
+
+    try {
+        const r = await fetch(`/api/documents/${id}/markdown`);
+        const d = await r.json();
+        const md = d.markdown || "";
+        const lines = md.split("\n");
+        let title = "", body = "";
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith("# ")) {
+                title = lines[i].slice(2).trim();
+            } else if (lines[i].startsWith("---")) {
+                body = lines.slice(i+1).join("\n").trim();
+                break;
+            }
+        }
+        if (!body) body = lines.join("\n").trim();
+        document.getElementById("editTitle").value = title;
+        document.getElementById("editContent").value = body;
+
+        const docR = await fetch("/api/documents");
+        const docs = await docR.json();
+        const doc = docs.find(x => x.id === id);
+        if (doc) {
+            document.getElementById("editCategory").value = doc.category || "";
+            document.getElementById("editTags").value = (doc.tags||[]).join(",");
+        }
+    } catch(e) { console.error(e); }
+}
+
+function showEditPanel() {
+    editingDocId = null;
+    document.getElementById("editTitleLabel").textContent = "新建文档";
+    document.getElementById("editTitle").value = "";
+    document.getElementById("editCategory").value = "";
+    document.getElementById("editTags").value = "";
+    document.getElementById("editContent").value = "";
+    document.getElementById("editSaveBtn").textContent = "创建文档";
+    document.getElementById("editPanel").style.display = "block";
+}
+
+function hideEditPanel() {
+    document.getElementById("editPanel").style.display = "none";
+    editingDocId = null;
+}
+
+async function saveDoc() {
+    const title = document.getElementById("editTitle").value.trim();
+    const category = document.getElementById("editCategory").value.trim();
+    const tags = document.getElementById("editTags").value.trim();
+    const content = document.getElementById("editContent").value.trim();
+    if (!title || !content) { toast("标题和内容不能为空"); return; }
+
+    try {
+        if (editingDocId) {
+            await fetch(`/api/documents/${editingDocId}`, {
+                method: "PUT",
+                body: new URLSearchParams({title, content, tags, category}),
+            });
+            toast("更新成功");
+        } else {
+            await fetch("/api/documents/text", {
+                method: "POST",
+                body: new URLSearchParams({title, content, tags, category}),
+            });
+            toast("创建成功");
+        }
+        hideEditPanel();
+        loadDocs(); loadStats();
+    } catch(e) { toast("操作失败: " + e.message); }
+}
+
+async function uploadFile() {
+    const title = document.getElementById("upTitle").value.trim();
+    const file = document.getElementById("upFile").files[0];
+    if (!title || !file) { toast("请输入标题并选择文件"); return; }
+    const fd = new FormData();
+    fd.append("title", title);
+    fd.append("category", document.getElementById("upCategory").value.trim());
+    fd.append("tags", document.getElementById("upTags").value.trim());
+    fd.append("file", file);
+    try {
+        const r = await fetch("/api/documents/upload", {method:"POST", body:fd});
+        const data = await r.json();
+        if (r.ok) {
+            toast(`上传成功! ID: ${data.doc_id}, 分块: ${data.chunk_count}`);
+            document.getElementById("upTitle").value = "";
+            document.getElementById("upFile").value = "";
+        } else {
+            toast(data.detail || "上传失败");
+        }
+    } catch(e) { toast("上传失败: " + e.message); }
+}
+
+async function uploadText() {
+    const title = document.getElementById("txtTitle").value.trim();
+    const content = document.getElementById("txtContent").value.trim();
+    if (!title || !content) { toast("请输入标题和内容"); return; }
+    try {
+        const r = await fetch("/api/documents/text", {
+            method: "POST",
+            body: new URLSearchParams({
+                title, content,
+                category: document.getElementById("txtCategory").value.trim(),
+                tags: document.getElementById("txtTags").value.trim(),
+            }),
+        });
+        const data = await r.json();
+        if (r.ok) {
+            toast(`添加成功! ID: ${data.doc_id}`);
+            document.getElementById("txtContent").value = "";
+            document.getElementById("txtTitle").value = "";
+        } else {
+            toast(data.detail || "添加失败");
+        }
+    } catch(e) { toast("添加失败: " + e.message); }
+}
+
+function esc(s) { if (!s) return ''; const d=document.createElement("div"); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+</script>
+</body>
+</html>

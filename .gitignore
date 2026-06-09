@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.DS_Store
+*.egg-info/
+.venv/
+venv/
+logs/
+data/chroma/
+*.log
+*.pid
+server_out.txt
+server_err.txt
+securtyagent.code-workspace
+pylib/
