@@ -193,6 +193,16 @@ set HF_ENDPOINT=https://hf-mirror.com
 └── requirements.txt            # Python 依赖
 ```
 
+## 更新日志
+
+参见 `CHANGELOG_PRODUCTION.md` — 涵盖 3 轮生产化改造、19 个文件、25 项改进：
+
+| 轮次 | 范围 | 关键改动 |
+|---|---|---|
+| 第一轮 | 性能与架构 | BM25 SQLite 增量存储、SVD 懒重建、异步 Reranker、去 LangChain、工具调用 |
+| 第二轮 | 安全与可靠性 | 跨平台兼容、速率限制异步化、CSP 安全头、日志脱敏、K8s 健康检查 |
+| 第三轮 | 细节打磨 | Query Rewrite 智能跳过、文件名防覆盖、BM25 加载优化、分页 |
+
 ## 依赖
 
 ```txt
