@@ -28,7 +28,7 @@ def main():
         print("=" * 60)
         print("STARTUP WARNINGS:")
         for w in warnings:
-            print(f"  ⚠  {w}")
+            print(f"  [WARN] {w}")
         print("=" * 60)
 
     loop_choice = _detect_loop()

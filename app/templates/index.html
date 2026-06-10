@@ -119,12 +119,13 @@ body { font-family:system-ui,-apple-system,sans-serif; background:#f0f2f5; color
     <div class="card-panel" id="panel-upload">
         <div class="card">
             <h3>上传文档</h3>
-            <p style="font-size:12px;color:#888;margin-bottom:12px;">支持 PDF, DOCX, XLSX, TXT, MD, 代码文件等</p>
-            <div class="input-group"><label>标题</label><input type="text" id="upTitle"></div>
+            <p style="font-size:12px;color:#888;margin-bottom:12px;">支持 PDF, DOCX, XLSX, TXT, MD。上传后自动分块索引，可立即查询。</p>
+            <div class="input-group"><label>标题</label><input type="text" id="upTitle" placeholder="文档标题"></div>
             <div class="input-group"><label>分类</label><input type="text" id="upCategory" placeholder="如: 技术文档"></div>
-            <div class="input-group"><label>标签</label><input type="text" id="upTags"></div>
+            <div class="input-group"><label>标签 (逗号分隔)</label><input type="text" id="upTags" placeholder="如: AI, NLP"></div>
             <div class="input-group"><label>文件</label><input type="file" id="upFile" accept=".md,.txt,.pdf,.docx,.xlsx,.py,.json,.csv,.xml,.html,.css,.js"></div>
-            <button class="btn btn-primary" onclick="uploadFile()">上传文件</button>
+            <button class="btn btn-primary" id="uploadBtn" onclick="uploadFile()">上传文件</button>
+            <div id="uploadResult" style="display:none;margin-top:10px;padding:10px;background:#e8f5e9;border-radius:6px;font-size:13px;border:1px solid #a5d6a7;"></div>
         </div>
         <div class="card">
             <h3>直接输入文本</h3>
@@ -161,11 +162,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 });
 
-function toast(msg) {
+function toast(msg, duration = 3000) {
     const el = document.getElementById("toast");
     el.textContent = msg;
     el.classList.add("show");
-    setTimeout(() => el.classList.remove("show"), 2500);
+    setTimeout(() => el.classList.remove("show"), duration);
 }
 
 function showPanel(name) {
@@ -462,6 +463,20 @@ async function uploadFile() {
     const title = document.getElementById("upTitle").value.trim();
     const file = document.getElementById("upFile").files[0];
     if (!title || !file) { toast("请输入标题并选择文件"); return; }
+
+    // Show progress in both toast and inline result area
+    const resultDiv = document.getElementById("uploadResult");
+    resultDiv.style.display = "block";
+    resultDiv.style.background = "#fff3e0";
+    resultDiv.style.border = "1px solid #ffb74d";
+    resultDiv.innerHTML = "<strong>⏳ 正在上传并处理文档...</strong><br>文件: " + esc(file.name) + " (" + (file.size/1024).toFixed(1) + " KB)<br>请稍候，大文件可能需要数十秒。";
+
+    const btn = document.getElementById("uploadBtn");
+    const origText = btn.textContent;
+    btn.textContent = "上传中...";
+    btn.disabled = true;
+    toast("正在上传并处理文档，请稍候...", 8000);
+
     const fd = new FormData();
     fd.append("title", title);
     fd.append("category", document.getElementById("upCategory").value.trim());
@@ -471,13 +486,36 @@ async function uploadFile() {
         const r = await fetch("/api/documents/upload", {method:"POST", body:fd});
         const data = await r.json();
         if (r.ok) {
-            toast(`上传成功! ID: ${data.doc_id}, 分块: ${data.chunk_count}`);
+            const msg = '上传成功: "' + esc(title) + '" | ID: ' + data.doc_id + ' | 分块: ' + data.chunk_count;
+            if (data.tables > 0) msg += ' | 表格: ' + data.tables;
+            if (data.images > 0) msg += ' | 图片: ' + data.images;
+            toast(msg, 5000);
+            resultDiv.style.background = "#e8f5e9";
+            resultDiv.style.border = "1px solid #a5d6a7";
+            resultDiv.innerHTML = "<strong>✅ 上传成功!</strong><br>" +
+                "标题: <b>" + esc(title) + "</b><br>" +
+                "文档ID: " + data.doc_id + " | 分块数: " + data.chunk_count +
+                (data.tables ? " | 表格: " + data.tables : "") +
+                (data.images ? " | 图片: " + data.images : "") +
+                "<br><span style='color:#666;font-size:11px;'>文档已索引，可在对话中查询。</span>";
             document.getElementById("upTitle").value = "";
             document.getElementById("upFile").value = "";
+            loadDocs(); loadStats();
         } else {
-            toast(data.detail || "上传失败");
+            resultDiv.style.background = "#ffebee";
+            resultDiv.style.border = "1px solid #ef9a9a";
+            resultDiv.innerHTML = "<strong>❌ 上传失败</strong><br>" + esc(data.detail || "未知错误");
+            toast("上传失败: " + (data.detail || "未知错误"), 5000);
         }
-    } catch(e) { toast("上传失败: " + e.message); }
+    } catch(e) {
+        resultDiv.style.background = "#ffebee";
+        resultDiv.style.border = "1px solid #ef9a9a";
+        resultDiv.innerHTML = "<strong>❌ 上传失败</strong><br>" + esc(e.message);
+        toast("上传失败: " + e.message, 5000);
+    } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+    }
 }
 
 async function uploadText() {
